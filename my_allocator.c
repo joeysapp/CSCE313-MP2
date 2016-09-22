@@ -151,7 +151,6 @@ extern Addr my_malloc(unsigned int _length) {
 			break;
 		}
 	}
-	// line 256
 	if (free_list[use] == NULL){
 		int split_section = -1;
 		for (int i = use + 1; i < free_list_length; i++){
@@ -165,7 +164,6 @@ extern Addr my_malloc(unsigned int _length) {
 		// wait what, < works and > doesn't??
 		printf("SPLIT SECTION: %i, USE: %i\n", split_section, use);
 		for (int i = split_section; i > use; i--){
-			// SplitSection(i) here
 			if (free_list[i] == NULL){
 				printf("Section empty");
 			}
