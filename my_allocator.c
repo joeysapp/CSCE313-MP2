@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <math.h>
 #include "my_allocator.h"
 
 /*--------------------------------------------------------------------------*/
@@ -90,7 +91,7 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 	main_block_start = main_block;
 	
 	// Free list for storing of addresses of blocks
-	free_list = malloc(free_list_length * sizeof(struct Node*));
+	free_list = (struct Node**)malloc(free_list_length * sizeof(struct Node*));
 
 	//printf("%p\n%p\n\n", main_block, free_list);
 	//printf("%i", free_list_length * sizeof(struct Node*));
@@ -104,31 +105,28 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 	while (to_allocate >= size_of_nodes){
 		int current_block_size = pow(2, allocate_in) * size_of_nodes;
 		if (current_block_size <= to_allocate){
+			to_allocate -= current_block_size;
 			struct Node* header = (struct Node*)main_block;
 			header->size = current_block_size;
-			main_block = (Addr)header + current_block_size;
+			main_block = (Addr)(header + current_block_size);
 			free_list[allocate_in] = header;
-			to_allocate -= current_block_size;
+			printf("Free space of size %i going into position %p. Beginning of list is %p.\n",
+			       current_block_size, free_list[allocate_in], main_block_start);
 		}
 		allocate_in--;
 	}
 
-/*	for (int i = 0; i < free_list_length; i++){
-		struct Node* header = (struct Node*)main_block_start;
-		int size_for_block = pow(2, i) * size_of_nodes;
-		header->size = size_for_block;
-		free_list[i] = header;
-		main_block_start += size_for_block;
-	}*/
-
 	printf("\n== The free list is %i entries.\n", free_list_length);
-
+	for (int i = 0; i < free_list_length; i++){
+		printf("== free_list[%i] - %p ==\n", i, free_list[i]);
+	}
 	return total_size;
 }
 
 int release_allocator(){
 	printf("\nFreeing main memory block!\n\n");	
-	free(main_block);
+	//free(main_block);
+	free(main_block_start);
 	return 0;
 }
 
@@ -141,7 +139,7 @@ extern Addr my_malloc(unsigned int _length) {
 	printf("Location of main block: %p\n", main_block);
 	printf("Location of main block start: %p\n", main_block_start);
 
-	int use;
+	int use = -1;
 	int size_needed = _length + sizeof(struct Node);
 	printf("* We need a space of %i\n", size_needed);
 	for (int i = 0; i < free_list_length; i++){
@@ -152,6 +150,7 @@ extern Addr my_malloc(unsigned int _length) {
 		}
 	}
 	if (free_list[use] == NULL){
+		printf("\n--- Splitting! ---\n");
 		int split_section = -1;
 		for (int i = use + 1; i < free_list_length; i++){
 			if (free_list[i] != NULL){
@@ -161,7 +160,7 @@ extern Addr my_malloc(unsigned int _length) {
 			}
 		}
 		if (split_section == -1){ printf("No space"); }
-		// wait what, < works and > doesn't??
+		
 		printf("SPLIT SECTION: %i, USE: %i\n", split_section, use);
 		for (int i = split_section; i > use; i--){
 			if (free_list[i] == NULL){
@@ -180,38 +179,34 @@ extern Addr my_malloc(unsigned int _length) {
 
 			printf("Start of memory block: %p, with size of: %i\n", current_node, current_node->size);
 
-			Addr next_node_ptr_s = (Addr)((Addr)current_node - (int) main_block_start);
+			Addr next_node_ptr = (Addr)((unsigned long)current_node ^ (1 << (int)(log2(current_node->size))));
+
+			//Addr next_node_ptr_s = (Addr)((Addr)current_node - main_block_start);
 			// Bit manipulation here, found on StackOverflow
-			Addr next_node_ptr_b = (Addr) ((int)next_node_ptr_s ^ ((int)current_node->size));
-			//next_node_ptr_b = (int)next_node_ptr_b >> 8;
-			//next_node_ptr_b = (int)next_node_ptr_b >> 4;
-			Addr next_node_ptr = (Addr)((int)next_node_ptr_b + main_block_start);
-			
-			printf("Offset start: %p, Offset buddy: %p, next ptr: %p\n", next_node_ptr_s, next_node_ptr_b, next_node_ptr);
+			//Addr next_node_ptr_b = (Addr) ((unsigned long)next_node_ptr_s ^ ((unsigned long)current_node->size));
+			//Addr next_node_ptr = (Addr)((unsigned long)next_node_ptr_b + (unsigned long) main_block_start);
 
-			printf("star: %p\n", main_block_start);
-			printf("incr: %p\n", next_node_ptr_b);
-			printf("????: %p\n", next_node_ptr);
+			printf("Current node is at %p. Next node will be put at %p.\n", current_node, next_node_ptr);
 
-			//printf("The buddy should go to: %p\n", (Addr)((char)next_node_ptr_b - (int) main_block_start));
-			//printf("The buddy should go to: %p\n", (struct Node*)next_node_ptr);
-			//struct Node* next_node = next_node_ptr;
-
-			current_node->next = (struct Node*) next_node_ptr;
-			printf("%p\n", current_node->next);
+			current_node->next = (struct Node*)next_node_ptr;
 			current_node->next->size = current_node->size;
-			//current_node->
-
+			printf("Size of node being stored: %i, %i\n\n", current_node->size, current_node->next->size);
+			printf("\n\nFree list @ %i: %p\n\n", i, free_list[i]);
+			//current_node->next->size = current_node->size;
 			
+			//current_node->
 			//current_node->next->size = current_node->size;
 			
 			free_list[i-1] = current_node;
 			
 		}
 	}
-	Addr address = (Addr) free_list[use] + sizeof(struct Node);
+	//printf("The address is %p. The size of node is %i.\n", free_list[use], sizeof(struct Node));
+	//printf("These added together is %p.\n", free_list[use]+sizeof(struct Node));
+	Addr address = (Addr)(free_list[use] + sizeof(struct Node*));
 	free_list[use]->free = false;
 	free_list[use] = free_list[use]->next;
+	//printf("Storing the node @ %p\n", address);
 	return address;
 }
 
@@ -224,7 +219,14 @@ extern int my_free(Addr _a) {
 }
 
 void free_list_check(){
-	printf("free_list\n");
+	for (int i = 0; i < free_list_length; i++){
+		struct Node* node = free_list[i];
+		if (node != NULL){
+			printf("== free_list[%i], address: %p, size: %i\n", i, node, node->size);
+		}
+	}
+
+/*	printf("free_list\n");
 	for (int i = 0; i < free_list_length; i++){
 		int number_of_items = 0;
 		printf("%i: ", i);
@@ -234,78 +236,8 @@ void free_list_check(){
 			printf("Address: %p, Size: %i ", node, node->size);
 			node = node->next;
 		}
+		printf("node %p\n", node);
 		printf("Number of Items: %i\n", number_of_items);
-	}
+	}*/
 }
 
-
-/*
-
-   
-	int use;
-	int size_needed = _length + sizeof(struct Node);
-	for (int i = 0; i < free_list_length; i++){
-		if (size_needed <= pow(2, i) * size_of_nodes){
-			use = i;
-			break;
-		}
-	}
-
-	if (free_list[use] == NULL){
-		int split_section = NULL;
-		for (int i = use + 1; i < free_list_length; i++){
-			if (free_list[i] != NULL){
-				split_section = i;
-				break;
-			}
-		}
-		if (split_section == NULL){ printf("No space"); }
-		for (int i = split_section; i < use; i--){
-			// SplitSection(i) here
-			if (free_list[i] == NULL){
-				printf("Section empty");
-			}
-			if (i == 0){
-				printf("Cannot split further than %i", size_of_nodes);
-			}
-			struct Node* current_node = free_list[i];
-			free_list[i] = current_node->next;
-			current_node->size = current_node->size/2;
-
-			Addr next_node_ptr = current_node + sizeof(struct Node);
-
-			current_node->next = (struct Node*) next_node_ptr;
-			current_node->next->size = current_node->size;
-
-			free_list[i-1] = current_node;
-
-		}
-	}
-
-
-				Addr next_node_ptr_s = (Addr) ((char) main_block_start - (char) current_node );
-			// Bit manipulation here, found on StackOverflow
-			Addr next_node_ptr_b = (Addr) ((char)next_node_ptr_s ^ (current_node->size));
-			Addr next_node_ptr = (Addr) (((char)next_node_ptr_b) + main_block_start);
-			
-			printf("Offset start: %p, Offset buddy: %p\n", next_node_ptr_s, next_node_ptr_b);
-
-			printf("star: %p\n", (Addr)main_block_start);
-			printf("incr: %p\n", (Addr)next_node_ptr_b);
-			printf("????: %p\n", (Addr)((char)next_node_ptr_b+main_block_start));
-
-			printf("The buddy should go to: %p\n", (Addr)((char)next_node_ptr_b +main_block_start));
-			//printf("The buddy should go to: %p\n", (struct Node*)next_node_ptr);
-			//struct Node* next_node = next_node_ptr;
-
-			current_node->next = (struct Node*)next_node_ptr;
-			printf("%p\n", current_node->next);
-			//current_node->next->size = current_node->size;
-
-			
-			//current_node->next->size = current_node->size;
-			
-			free_list[i-1] = current_node;
-
-
-	*/
