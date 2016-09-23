@@ -89,9 +89,17 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 	// Main block (where we will be storing blocks)
 	main_block = (Addr)malloc((total_size * sizeof(char)));
 	main_block_start = main_block;
+
 	
 	// Free list for storing of addresses of blocks
-	free_list = (struct Node**)malloc(free_list_length * sizeof(struct Node*));
+	printf("\n--%p--\n", free_list);
+
+	//free_list = (struct Node**)malloc(free_list_length * sizeof(struct Node));
+	free_list = (struct Node**)calloc(free_list_length, sizeof(struct Node));
+
+	printf("\n--%p--\n", free_list);
+	printf("\n--%p--\n", free_list[0]);
+	printf("\n--%p--\n", free_list[3]);
 
 	//printf("%p\n%p\n\n", main_block, free_list);
 	//printf("%i", free_list_length * sizeof(struct Node*));
@@ -108,17 +116,20 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 			to_allocate -= current_block_size;
 			struct Node* header = (struct Node*)main_block;
 			header->size = current_block_size;
+			header->next = NULL;
 			main_block = (Addr)(header + current_block_size);
 			free_list[allocate_in] = header;
-			printf("Free space of size %i going into position %p. Beginning of list is %p.\n",
-			       current_block_size, free_list[allocate_in], main_block_start);
+			printf("Free space of size %i going into position %p, free_list[%i]. Beginning of list is %p.\n",
+			       current_block_size, free_list[allocate_in], allocate_in, main_block_start);
 		}
 		allocate_in--;
 	}
 
-	printf("\n== The free list is %i entries.\n", free_list_length);
+	printf("\n== The free list is %i entries. This is the only used one:\n", free_list_length);
 	for (int i = 0; i < free_list_length; i++){
-		printf("== free_list[%i] - %p ==\n", i, free_list[i]);
+		if ((struct Node*)free_list[i] != NULL){
+			printf("== free_list[%i] - %p ==\n", i, free_list[i]);
+		}
 	}
 	return total_size;
 }
@@ -126,6 +137,9 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 int release_allocator(){
 	printf("\nFreeing main memory block!\n\n");	
 	//free(main_block);
+	for (int i = 0; i < free_list_length; i++){
+		free_list[i] = NULL;
+	}
 	free(main_block_start);
 	return 0;
 }
@@ -145,6 +159,7 @@ extern Addr my_malloc(unsigned int _length) {
 	for (int i = 0; i < free_list_length; i++){
 		//if (size_needed < pow(2, i) * size_of_nodes){
 		if (pow(2, i)*size_of_nodes >= size_needed){
+			printf("\nPut it in section [%i]\n", i);
 			use = i;
 			break;
 		}
@@ -154,7 +169,7 @@ extern Addr my_malloc(unsigned int _length) {
 		int split_section = -1;
 		for (int i = use + 1; i < free_list_length; i++){
 			if (free_list[i] != NULL){
-				printf("Please split this: %i\nPlease use this section: %i\n", i, use);
+				printf("Please split section: %p\nPlease go down to this: %p\n", free_list[i], free_list[use]);
 				split_section = i;
 				break;
 			}
@@ -178,8 +193,15 @@ extern Addr my_malloc(unsigned int _length) {
 			current_node->size = current_node->size/2;
 
 			printf("Start of memory block: %p, with size of: %i\n", current_node, current_node->size);
+			
+			//Addr next_node_ptr = (Addr)((unsigned long)current_node ^ (unsigned long)(1 << (unsigned long)(log2(current_node->size))));
+		
+			// matthew says to do this because current_node->size will XOR the binary representation anyways
+			Addr buddy = (Addr)(current_node ^ (current_node->size));
 
-			Addr next_node_ptr = (Addr)((unsigned long)current_node ^ (1 << (int)(log2(current_node->size))));
+			Addr next_node_ptr = (Addr)((unsigned long)current_node + (int)(current_node->size));
+
+			//Addr next_node_ptr = (Addr)(
 
 			//Addr next_node_ptr_s = (Addr)((Addr)current_node - main_block_start);
 			// Bit manipulation here, found on StackOverflow
@@ -190,6 +212,7 @@ extern Addr my_malloc(unsigned int _length) {
 
 			current_node->next = (struct Node*)next_node_ptr;
 			current_node->next->size = current_node->size;
+			current_node->next->next = NULL;
 			printf("Size of node being stored: %i, %i\n\n", current_node->size, current_node->next->size);
 			printf("\n\nFree list @ %i: %p\n\n", i, free_list[i]);
 			//current_node->next->size = current_node->size;
@@ -201,10 +224,13 @@ extern Addr my_malloc(unsigned int _length) {
 			
 		}
 	}
-	//printf("The address is %p. The size of node is %i.\n", free_list[use], sizeof(struct Node));
+	printf("The address is %p. The next node is %p.\n", free_list[use], free_list[use]->next);
 	//printf("These added together is %p.\n", free_list[use]+sizeof(struct Node));
 	Addr address = (Addr)(free_list[use] + sizeof(struct Node*));
 	free_list[use]->free = false;
+	if (free_list[use]->next == NULL){
+		printf("it's null");
+	}
 	free_list[use] = free_list[use]->next;
 	//printf("Storing the node @ %p\n", address);
 	return address;
@@ -219,12 +245,18 @@ extern int my_free(Addr _a) {
 }
 
 void free_list_check(){
+	printf("== == == Printing of current free list == == ==\n");
 	for (int i = 0; i < free_list_length; i++){
-		struct Node* node = free_list[i];
-		if (node != NULL){
-			printf("== free_list[%i], address: %p, size: %i\n", i, node, node->size);
+		if (free_list[i] != NULL){
+			//printf("%p\n", free_list[i]);
+			struct Node* node = free_list[i];
+		
+			if (node != NULL){
+				printf("== free_list[%i], address: %p, size: %i\n", i, node, node->size);
+			}
 		}
 	}
+	printf("== == == == == == == == == == == == == == == == ==\n");
 
 /*	printf("free_list\n");
 	for (int i = 0; i < free_list_length; i++){
