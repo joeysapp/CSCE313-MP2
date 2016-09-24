@@ -183,6 +183,100 @@ extern int my_free(Addr _a) {
 	struct Node* buddy_node = (struct Node*)buddy;
 	struct Node* buddy_lookup = (struct Node*)free_list[i];
 	
+	//printf("%i: This node is of size %i and is looking at a node of size %i.\n", i, node->size, buddy_node->size);
+
+	//printf("Node %p has buddy %p and is at %p in freelist\n", node, buddy_node, buddy_lookup);
+
+	if (node->size != buddy_node->size){
+		if (free_list[i] == NULL){
+			node->free = true;
+			node->next = NULL;
+			free_list[i] = node;
+			return 1;
+		} else {
+			node->free = true;
+			node->next = NULL;
+			free_list[i]->next = node;
+			return 1;
+		}
+	}
+
+	if (free_list[i] == NULL || buddy_lookup == NULL){
+		node->free = true;
+		node->next = NULL;
+		free_list[i] = node;
+		return 1;
+	}
+
+	while (buddy_lookup != buddy){
+		printf("step");
+		if (buddy_lookup->next != NULL){
+			buddy_lookup = buddy_lookup->next;
+		} else {
+			//return 1; 
+		}
+	}
+	// Found this ? : stuff on stackoverflow
+	Addr left_node = (Addr)((unsigned long)node < (unsigned long)buddy_lookup ? node : buddy_lookup);
+
+	struct Node* new_node = (struct Node*)left_node;
+	new_node->size = node->size + buddy_lookup->size;
+	new_node->next = NULL;
+	
+	if (free_list[i]->next != NULL){
+		free_list[i] = free_list[i]->next;
+	} else {
+		free_list[i] = NULL;
+	}
+	if (free_list[i+1] == NULL){
+		free_list[i+1] = new_node;
+	} else {
+		printf("cascade");
+		free_list[i+1]->next = new_node;
+		//new_node->next = free_list[i+1];
+		Addr to_release = (Addr)((unsigned long)new_node + sizeof(struct Node));
+		my_free(to_release);
+	}
+	return 0;
+}
+
+void free_list_check(){
+	printf("== == == Printing of current free list == == ==\n");
+	for (int i = 0; i < free_list_length; i++){
+		int num = 0;
+		struct Node* node = free_list[i];
+		if (node != NULL){
+			printf("Address: %p, size: %i (", node, node->size);
+		}
+		while (node != NULL){
+			printf("%p, ", node);
+			num++;
+			node = node->next;
+		}
+		printf(") Number of items: %i\n", num);
+	}
+	printf("== == == == == == == == == == == == == == == == ==\n");
+}
+
+/*
+   extern int my_free(Addr _a) {
+	if (_a == NULL){ return 1; }
+	
+	_a = (Addr)((unsigned long)_a - sizeof(struct Node));
+	struct Node* node = (struct Node*)_a;
+
+	unsigned long ptr = (unsigned long)node;
+	ptr = ptr - (unsigned long)main_block_start;
+	ptr ^= (1 << (int)log2(node->size));
+	ptr += (unsigned long)main_block_start;
+
+	Addr buddy = (Addr)ptr;
+
+	int i = log2((node->size)/size_of_nodes);
+
+	struct Node* buddy_node = (struct Node*)buddy;
+	struct Node* buddy_lookup = (struct Node*)free_list[i];
+	
 	printf("%i: This node is of size %i and is looking at a node of size %i.\n", i, node->size, buddy_node->size);
 
 	printf("Node %p has buddy %p and is at %p in freelist\n", node, buddy_node, buddy_lookup);
@@ -208,10 +302,10 @@ extern int my_free(Addr _a) {
 	}
 
 	while (buddy_lookup != NULL && buddy_lookup != buddy){
-		printf("step");
 		buddy_lookup = buddy_lookup->next;
-
+		printf("step\n");
 	}
+
 	// Found this ? : stuff on stackoverflow
 	Addr left_node = (Addr)((unsigned long)node < (unsigned long)buddy_lookup ? node : buddy_lookup);
 
@@ -227,7 +321,7 @@ extern int my_free(Addr _a) {
 	if (free_list[i+1] == NULL){
 		free_list[i+1] = new_node;
 	} else {
-		//free_list[i+1]->next = new_node;
+		free_list[i+1]->next = new_node;
 		//new_node->next = free_list[i+1];
 		Addr to_release = (Addr)((unsigned long)new_node + sizeof(struct Node));
 		my_free(to_release);
@@ -235,20 +329,4 @@ extern int my_free(Addr _a) {
 	return 0;
 }
 
-void free_list_check(){
-	printf("== == == Printing of current free list == == ==\n");
-	for (int i = 0; i < free_list_length; i++){
-		int num = 0;
-		struct Node* node = free_list[i];
-		if (node != NULL){
-			printf("Address: %p, size: %i (", node, node->size);
-		}
-		while (node != NULL){
-			printf("%p, ", node);
-			num++;
-			node = node->next;
-		}
-		printf(") Number of items: %i\n", num);
-	}
-	printf("== == == == == == == == == == == == == == == == ==\n");
-}
+*/
