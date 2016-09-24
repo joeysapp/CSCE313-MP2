@@ -108,6 +108,7 @@ unsigned int init_allocator(unsigned int _basic_block_size, unsigned int _length
 		}
 		allocate_in--;
 	}
+	printf("%i, %i, %i\n", size_of_nodes, total_size, free_list_length);
 	return total_size;
 }
 
@@ -126,7 +127,6 @@ extern Addr my_malloc(unsigned int _length) {
 		}
 	}
 	if (free_list[use] == NULL){
-		printf("\n--- Splitting! ---\n");
 		int split_section = -1;
 		for (int i = use + 1; i < free_list_length; i++){
 			if (free_list[i] != NULL){
@@ -135,6 +135,7 @@ extern Addr my_malloc(unsigned int _length) {
 			}
 		}
 		if (use == -1 || split_section == -1){
+			//throw error;
 			//exit(EXIT_FAILURE);
 			printf("Error: No space for size of %i!\n", size_needed);
 			return 0;
@@ -144,7 +145,8 @@ extern Addr my_malloc(unsigned int _length) {
 			if (free_list[i] == NULL){ printf("Section empty"); }
 			if (i == 0){ printf("Cannot split further than %i", size_of_nodes); }
 			struct Node* current_node = free_list[i];
-			free_list[i] = current_node->next;	
+			free_list[i] = current_node->next;
+			//free_list[i] = current_node->next;	
 			current_node->size = current_node->size/2;
 		
 			// matthew says to do this because current_node->size will XOR the binary representation anyways
@@ -160,12 +162,14 @@ extern Addr my_malloc(unsigned int _length) {
 		}
 	}
 	Addr address = (Addr)((unsigned long)free_list[use] + (int)sizeof(struct Node));
-	free_list[use]->free = false;
+	//free_list[use]->free = false;
 	free_list[use] = free_list[use]->next;
+	printf("Malloc'd %i at %p.\n", _length, address);
 	return address;
 }
 
 extern int my_free(Addr _a) {
+	printf("Freeing %p.\n", _a);
 	if (_a == NULL){ return 1; }
 	
 	_a = (Addr)((unsigned long)_a - sizeof(struct Node));
@@ -182,25 +186,10 @@ extern int my_free(Addr _a) {
 
 	struct Node* buddy_node = (struct Node*)buddy;
 	struct Node* buddy_lookup = (struct Node*)free_list[i];
-	
-	//printf("%i: This node is of size %i and is looking at a node of size %i.\n", i, node->size, buddy_node->size);
 
-	//printf("Node %p has buddy %p and is at %p in freelist\n", node, buddy_node, buddy_lookup);
-
-	if (node->size != buddy_node->size){
-		if (free_list[i] == NULL){
-			node->free = true;
-			node->next = NULL;
-			free_list[i] = node;
-			return 1;
-		} else {
-			node->free = true;
-			node->next = NULL;
-			free_list[i]->next = node;
-			return 1;
-		}
+	if (buddy_lookup == node){
+		buddy_lookup = buddy_lookup->next;
 	}
-
 	if (free_list[i] == NULL || buddy_lookup == NULL){
 		node->free = true;
 		node->next = NULL;
@@ -209,12 +198,18 @@ extern int my_free(Addr _a) {
 	}
 
 	while (buddy_lookup != buddy){
-		printf("step");
-		if (buddy_lookup->next != NULL){
-			buddy_lookup = buddy_lookup->next;
+		if (buddy_lookup->next == NULL){
+			node->free = true;
+			node->next = buddy_lookup;
+			free_list[i] = node;
+			return 1;
 		} else {
-			//return 1; 
+			buddy_lookup = buddy_lookup->next;
 		}
+	}
+
+	if (free_list[i] == buddy_lookup){
+		free_list[i] = free_list[i]->next;
 	}
 	// Found this ? : stuff on stackoverflow
 	Addr left_node = (Addr)((unsigned long)node < (unsigned long)buddy_lookup ? node : buddy_lookup);
@@ -222,18 +217,11 @@ extern int my_free(Addr _a) {
 	struct Node* new_node = (struct Node*)left_node;
 	new_node->size = node->size + buddy_lookup->size;
 	new_node->next = NULL;
-	
-	if (free_list[i]->next != NULL){
-		free_list[i] = free_list[i]->next;
-	} else {
-		free_list[i] = NULL;
-	}
 	if (free_list[i+1] == NULL){
 		free_list[i+1] = new_node;
 	} else {
-		printf("cascade");
-		free_list[i+1]->next = new_node;
-		//new_node->next = free_list[i+1];
+		new_node->next = free_list[i+1];
+		//free_list[i+1] = new_node;
 		Addr to_release = (Addr)((unsigned long)new_node + sizeof(struct Node));
 		my_free(to_release);
 	}
@@ -259,7 +247,8 @@ void free_list_check(){
 }
 
 /*
-   extern int my_free(Addr _a) {
+extern int my_free(Addr _a) {
+	printf("Freeing %p.\n", _a);
 	if (_a == NULL){ return 1; }
 	
 	_a = (Addr)((unsigned long)_a - sizeof(struct Node));
@@ -267,7 +256,7 @@ void free_list_check(){
 
 	unsigned long ptr = (unsigned long)node;
 	ptr = ptr - (unsigned long)main_block_start;
-	ptr ^= (1 << (int)log2(node->size));
+	ptr ^= 1 << (int)log2(node->size);
 	ptr += (unsigned long)main_block_start;
 
 	Addr buddy = (Addr)ptr;
@@ -276,11 +265,11 @@ void free_list_check(){
 
 	struct Node* buddy_node = (struct Node*)buddy;
 	struct Node* buddy_lookup = (struct Node*)free_list[i];
-	
-	printf("%i: This node is of size %i and is looking at a node of size %i.\n", i, node->size, buddy_node->size);
 
-	printf("Node %p has buddy %p and is at %p in freelist\n", node, buddy_node, buddy_lookup);
-	
+	if (buddy_lookup == node){
+		buddy_lookup = buddy_lookup->next;
+	}
+
 	if (node->size != buddy_node->size){
 		if (free_list[i] == NULL){
 			node->free = true;
@@ -289,11 +278,12 @@ void free_list_check(){
 			return 1;
 		} else {
 			node->free = true;
-			node->next = NULL;
-			free_list[i]->next = node;
+			node->next = free_list[i];
+			free_list[i] = node;
 			return 1;
 		}
 	}
+
 	if (free_list[i] == NULL || buddy_lookup == NULL){
 		node->free = true;
 		node->next = NULL;
@@ -301,9 +291,20 @@ void free_list_check(){
 		return 1;
 	}
 
-	while (buddy_lookup != NULL && buddy_lookup != buddy){
-		buddy_lookup = buddy_lookup->next;
-		printf("step\n");
+	while (buddy_lookup != buddy){
+		if (buddy_lookup->next != NULL){
+			buddy_lookup = buddy_lookup->next;
+		} else {
+			node->free = true;
+			node->next = buddy_lookup;
+			free_list[i] = node;
+			return 1;
+		}
+	}
+	if (free_list[i] == buddy_lookup){
+		free_list[i] = free_list[i]->next;
+	} else {
+		free_list[i]->next = NULL;
 	}
 
 	// Found this ? : stuff on stackoverflow
@@ -312,17 +313,10 @@ void free_list_check(){
 	struct Node* new_node = (struct Node*)left_node;
 	new_node->size = node->size + buddy_lookup->size;
 	new_node->next = NULL;
-	
-	if (free_list[i]->next != NULL){
-		free_list[i] = free_list[i]->next;
-	} else {
-		free_list[i] = NULL;
-	}
 	if (free_list[i+1] == NULL){
 		free_list[i+1] = new_node;
 	} else {
-		free_list[i+1]->next = new_node;
-		//new_node->next = free_list[i+1];
+		new_node->next = free_list[i+1];
 		Addr to_release = (Addr)((unsigned long)new_node + sizeof(struct Node));
 		my_free(to_release);
 	}
