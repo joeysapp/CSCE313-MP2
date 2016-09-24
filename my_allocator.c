@@ -186,7 +186,7 @@ extern int my_free(Addr _a) {
 	printf("%i: This node is of size %i and is looking at a node of size %i.\n", i, node->size, buddy_node->size);
 
 	printf("Node %p has buddy %p and is at %p in freelist\n", node, buddy_node, buddy_lookup);
-
+	
 	if (node->size != buddy_node->size){
 		if (free_list[i] == NULL){
 			node->free = true;
@@ -200,7 +200,6 @@ extern int my_free(Addr _a) {
 			return 1;
 		}
 	}
-
 	if (free_list[i] == NULL || buddy_lookup == NULL){
 		node->free = true;
 		node->next = NULL;
@@ -208,13 +207,10 @@ extern int my_free(Addr _a) {
 		return 1;
 	}
 
-	while (buddy_lookup != buddy){
+	while (buddy_lookup != NULL && buddy_lookup != buddy){
 		printf("step");
-		if (buddy_lookup->next != NULL){
-			buddy_lookup = buddy_lookup->next;
-		} else {
-			//return 1; 
-		}
+		buddy_lookup = buddy_lookup->next;
+
 	}
 	// Found this ? : stuff on stackoverflow
 	Addr left_node = (Addr)((unsigned long)node < (unsigned long)buddy_lookup ? node : buddy_lookup);
@@ -231,7 +227,7 @@ extern int my_free(Addr _a) {
 	if (free_list[i+1] == NULL){
 		free_list[i+1] = new_node;
 	} else {
-		free_list[i+1]->next = new_node;
+		//free_list[i+1]->next = new_node;
 		//new_node->next = free_list[i+1];
 		Addr to_release = (Addr)((unsigned long)new_node + sizeof(struct Node));
 		my_free(to_release);
