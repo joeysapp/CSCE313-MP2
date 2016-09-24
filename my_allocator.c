@@ -215,30 +215,76 @@ extern Addr my_malloc(unsigned int _length) {
 extern int my_free(Addr _a) {
 	// I think this is where you recursively join up free buddies?
 	/* Same here! */
-	printf("\nFreeing: %p\n", _a);
+	printf("\n=\t=\t=\t=\t=\t=\t=\nFreeing: %p\n", _a);
 	if (_a == NULL){
 		return 1;
 	}
 	
+	printf("Finding node..\n");
 	_a -= sizeof(struct Node);	
 	struct Node* node = (struct Node*)_a;
-	printf("\t\t%p, %i\n", node, node->size);
+	printf("Node address: %p\n\n", node);
 
+	printf("Finding buddy..\n");
 	unsigned long ptr = (unsigned long)node;
 	ptr = ptr - (unsigned long)main_block_start;
 	ptr ^= 1 << (int)log2(node->size);
 	ptr += (unsigned long)main_block_start;
-	
+	printf("Buddy address: %p\n\n", ptr);
+
 	// This is the buddy of the given node....
 	// but what now.....
 	Addr buddy = (Addr)ptr;
 
 	// find the buddy in free list and combine
-	
+	printf("Finding buddy in free_list..\n");
 	int i = log2((node->size)/size_of_nodes);
+
+	struct Node* buddy_node = (struct Node*)buddy;
+	struct Node* buddy_lookup = (struct Node*)free_list[i];
+	printf("step.......\n");
+	while (buddy_node->free == true && buddy_lookup != buddy){
+		printf("step..\n");
+		buddy_lookup = buddy_lookup->next;
+	}
+	if (buddy_lookup == NULL){
+		printf("No buddy node to join to.\n");
+		node->free = true;
+		node->next = free_list[i];
+//		free_list[i]->next = free_list[i];
+		free_list[i] = node;
+		return 0;
+	}
 	
-		
-	printf("Buddy node: %p", buddy);
+	printf("Found node in list %p\n", buddy_lookup);
+	printf("Buddy node: %p\n", buddy);
+
+	// Found this ? : stuff on stackoverflow
+	Addr left_node = (Addr)((int)node < (int)buddy_lookup ? node : buddy_lookup);
+
+	struct Node* new_node = (struct Node*)left_node;
+	new_node->size = node->size + buddy_lookup->size;
+	new_node->next = NULL;
+	printf("New node: %p, size: %i\n", new_node, new_node->size);
+	
+	if (free_list[i]->next != NULL){
+		free_list[i] = free_list[i]->next;
+	} else {
+		free_list[i] = NULL;
+	}
+	
+	if (free_list[i+1] == NULL){
+		free_list[i+1] = new_node;
+	} else {
+		new_node->next = free_list[i+1];
+		//free_list[i+1] = new_node;
+		printf("Will now add %p and %p to free list and try to combine\n", free_list[i+1], free_list[i+1]->next);
+		printf("Current node pos: %p\n", new_node);
+		printf("size: %i\n", free_list[i+1]->size);
+		Addr to_release = (Addr)((Addr)new_node + sizeof(struct Node));
+		my_free(to_release);
+		//my_free(free_list[i+1]);
+	}
 	
 	//free(_a);
 	return 0;
@@ -249,12 +295,15 @@ void free_list_check(){
 	for (int i = 0; i < free_list_length; i++){
 		int num = 0;
 		struct Node* node = free_list[i];
+		if (node != NULL){
+			printf("Address: %p, size: %i (", node, node->size);
+		}
 		while (node != NULL){
+			printf("%p, ", node);
 			num++;
-			printf("Address: %p, size: %i ", node, node->size);
 			node = node->next;
 		}
-		printf("Number of items: %i\n", num);
+		printf(") Number of items: %i\n", num);
 	}
 	printf("== == == == == == == == == == == == == == == == ==\n");
 }
